@@ -86,13 +86,13 @@ int main(int argc, char *argv[]) {
   }
 
   /* Compute the average temperature */
-  double avg = 0;
+  double avg = 0.0;
 #pragma omp parallel shared(prev, curr, avg)
   {
 #pragma omp for schedule(dynamic,chunk) reduction(+:avg) nowait
     for (int i = 0; i < nx; i++) {
       for (int j = 0; j < nx; j++) {
-	avg = curr[i][j];
+	avg += curr[i][j];
       }
     }
   }
