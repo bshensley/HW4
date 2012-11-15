@@ -1,15 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <assert.h>
 
-int step(double **prev, double **curr, const double kappa, const double dx, const double dt, const int nx) {
-
-
-
-
-  return 0;
-}
-
+/* Prints grid to screen, with (0,0) in upper left */
 int printgrid(double **grid, const int nx) {
     for (int j = 0; j < nx; j++) {
       for (int i = 0; i < nx; i++) {
@@ -32,17 +26,11 @@ int main(int argc, char *argv[]) {
   /* Initialize grid to nx by nx grid */ 
   double **curr = (double**)malloc(nx * sizeof(double));
   double **prev = (double**)malloc(nx * sizeof(double));
-  if (curr == NULL || prev == NULL) {
-    fprintf(stderr, "Error, cannot allocate space for grid!\n");
-    return 0;
-  }
+  assert(curr != NULL && prev != NULL);
   for (int i = 0; i < nx; i++) {
     curr[i] = (double*)malloc(nx * sizeof(double));
     prev[i] = (double*)malloc(nx * sizeof(double));
-    if (curr[i] == NULL || prev[i] == NULL) {
-      fprintf(stderr, "Error, cannot allocate space for grid!\n");
-      return 0;
-    }
+    assert(curr[i] != NULL && prev[i] != NULL);
     curr[i][0] = pow(cos(dx*i),2);
     prev[i][0] = pow(cos(dx*i),2);
     curr[i][nx-1] = pow(sin(dx*i),2);
@@ -53,6 +41,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /* Implement finite difference method */
   for (double t = 0; t < tmax; t += dt) {
     for (int i = 0; i < nx; i++) {
       for (int j = 1; j < nx - 1; j++) {
@@ -73,11 +62,13 @@ int main(int argc, char *argv[]) {
 	}
       }
     }
+    /* Swap the current and previous grids */
     double **tmp = curr;
     curr = prev;
     prev = tmp;
   }
 
+  /* Compute the average temperature */
   double avg = 0;
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < nx; j++) {
@@ -85,8 +76,12 @@ int main(int argc, char *argv[]) {
     }
   }
   avg = avg/(nx*nx);
-  printf("%lf\n", avg);
+  printf("#%lf\n", avg);
 
+  /* Final data dump */
+  printgrid(curr, nx);
+
+  /* Free arrays */
   for (int i = 0; i < nx; i++) {
     free(curr[i]);
     free(prev[i]);
