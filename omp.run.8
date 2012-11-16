@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+# parallel/serial job using 1 node and 8 processor cores per node,
+# and runs for 1 hour (max).
+#PBS -l nodes=1:ppn=8,walltime=02:00:00
+#
+# send email on abortion, beginning and ending
+#PBS -m abe
+#
+# error and log files
+#PBS -e log.err
+#PBS -o log.log
+#
+#PBS -V
+cd /home/bhensley/hw4/
+for nx in 128 256 512 1024
+do
+./heat_omp $nx 8 > heat_omp.$nx.8.out
+done

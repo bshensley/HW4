@@ -1,4 +1,4 @@
-CC = icc
+CC = gcc
 OBJS_SERIAL := heat_serial.o
 OBJS_OMP := heat_omp.o
 OBJS := $(OBJS_SERIAL) $(OBJS_OMP)

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
+#include <time.h>
 
 /* Prints grid to screen, with (0,0) in upper left */
 int printgrid(double **grid, const int nx) {
@@ -16,6 +17,10 @@ int printgrid(double **grid, const int nx) {
 
 
 int main(int argc, char *argv[]) {
+  clock_t begin, end;
+  double exec_time;
+  begin = clock();
+
   const int nx = atoi(argv[1]);
   const double kappa = 1.0;
   const double pi = 3.14159265358979;
@@ -76,9 +81,9 @@ int main(int argc, char *argv[]) {
     }
   }
   avg = avg/(nx*nx);
-  printf("#%lf\n", avg);
 
   /* Final data dump */
+  printf("#%lf\n", avg);
   printgrid(curr, nx);
 
   /* Free arrays */
@@ -88,6 +93,10 @@ int main(int argc, char *argv[]) {
   }
   free(prev);
   free(curr);
+
+  end = clock();
+  exec_time = (double)(end - begin) / CLOCKS_PER_SEC;
+  printf("#%lf\n", exec_time);
 }
   
 

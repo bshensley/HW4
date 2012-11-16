@@ -18,6 +18,10 @@ int printgrid(double **grid, const int nx) {
 
 int main(int argc, char *argv[]) {
   const int nx = atoi(argv[1]);
+  const int nthreads = atoi(argv[2]);
+  const int chunk = nx / nthreads;
+
+  /* Equation parameters, constants */
   const double kappa = 1.0;
   const double pi = 3.14159265358979;
   const double tmax = 0.5*pi*pi/kappa;
@@ -28,10 +32,19 @@ int main(int argc, char *argv[]) {
   double **curr = (double**)malloc(nx * sizeof(double));
   double **prev = (double**)malloc(nx * sizeof(double));
   assert(curr != NULL && prev != NULL);
+
+  int rc = MPI_Init(&argc,&argv);
+  if (rc != MPI_SUCCESS) {
+    printf ("Error starting MPI program. Terminating.\n");
+    MPI_Abort(MPI_COMM_WORLD, rc);
+  }
+
   for (int i = 0; i < nx; i++) {
     curr[i] = (double*)malloc(nx * sizeof(double));
     prev[i] = (double*)malloc(nx * sizeof(double));
     assert(curr[i] != NULL && prev[i] != NULL);
+  }
+  for (int i = 0; i < nx; i++) {
     curr[i][0] = pow(cos(dx*i),2);
     prev[i][0] = pow(cos(dx*i),2);
     curr[i][nx-1] = pow(sin(dx*i),2);
@@ -70,7 +83,7 @@ int main(int argc, char *argv[]) {
   }
 
   /* Compute the average temperature */
-  double avg = 0;
+  double avg = 0.0;
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < nx; j++) {
       avg += curr[i][j];
@@ -90,5 +103,3 @@ int main(int argc, char *argv[]) {
   free(prev);
   free(curr);
 }
-  
-
