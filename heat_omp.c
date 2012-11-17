@@ -3,7 +3,6 @@
 #include <math.h>
 #include <assert.h>
 #include <omp.h>
-#include <time.h>
 
 /* Prints grid to screen, with (0,0) in upper left */
 int printgrid(double **grid, const int nx) {
@@ -18,9 +17,7 @@ int printgrid(double **grid, const int nx) {
 
 
 int main(int argc, char *argv[]) {
-  clock_t begin, end;
-  double exec_time;
-  begin = clock();
+  double start = omp_get_wtime();
 
   const int nx = atoi(argv[1]);
   const int nthreads = atoi(argv[2]);
@@ -115,7 +112,7 @@ int main(int argc, char *argv[]) {
   free(prev);
   free(curr);
 
-  end = clock();
-  exec_time = (double)(end - begin) / CLOCKS_PER_SEC;
+  double end = omp_get_wtime();
+  double exec_time = end - start;
   printf("#%lf\n", exec_time);
 }
