@@ -2,12 +2,18 @@
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
+#include <string.h>
+#include <time.h>
 #include "mpi.h"
 
 int main(int argc, char *argv[]) {
+  clock_t begin, end;
+  double exec_time;
+  begin = clock();
+
   int numtasks, rank;
   MPI_Request reqs[4];
-  //  MPI_Status stats[4];
+  MPI_Status stats[4];
   int rc = MPI_Init(&argc,&argv);
   if (rc != MPI_SUCCESS) {
     printf ("Error starting MPI program. Terminating.\n");
@@ -45,26 +51,16 @@ int main(int argc, char *argv[]) {
     double xcoord = dx*(rank * len + i - 1);
     curr[i][0] = pow(cos(xcoord),2);
     prev[i][0] = pow(cos(xcoord),2);
-    curr[i][nx-1] = pow(sin(xcoord*i),2);
-    prev[i][nx-1] = pow(sin(xcoord*i),2);
+    curr[i][nx-1] = pow(sin(xcoord),2);
+    prev[i][nx-1] = pow(sin(xcoord),2);
     for (int j = 1; j < nx - 1; j++) {
       curr[i][j] = 0.0;
       prev[i][j] = 0.0;
     }
   }
 
-  printf("Intialization success on proc %d!\n", rank);
-
-  for (int j = 0; j < nx; j++) {
-    for (int i = 1; i < len + 1; i++) {
-      printf("%f ", curr[i][j]);
-    }
-    printf("\n");
-  }
-
   /* Implement finite difference method */
   for (double t = 0; t < tmax; t += dt) {
-
     int rprev, rnext;
     rprev = rank - 1;
     if (rank == 0) {
@@ -76,21 +72,34 @@ int main(int argc, char *argv[]) {
     }
 
     /* Receive data from adjacent blocks and place into ghost cells */
-    MPI_Irecv(&curr[len+1], nx, MPI_DOUBLE, rprev, 1, MPI_COMM_WORLD, &reqs[0]);
-    MPI_Irecv(&curr[0], nx, MPI_DOUBLE, rnext, 1, MPI_COMM_WORLD, &reqs[1]);
+    MPI_Irecv(&curr[len+1][0], nx, MPI_DOUBLE, rnext, 1, MPI_COMM_WORLD, &reqs[0]);
+    MPI_Irecv(&curr[0][0], nx, MPI_DOUBLE, rprev, 2, MPI_COMM_WORLD, &reqs[1]);
 
     /* Pass data to ghost cells of adjacent blocks */
-    MPI_Isend(&curr[0], 1, MPI_DOUBLE, rprev, 1, MPI_COMM_WORLD, &reqs[2]);
-    MPI_Isend(&curr[len+1], 1, MPI_DOUBLE, rnext, 1, MPI_COMM_WORLD, &reqs[3]);
+    if (rank == numtasks - 1) {
+      MPI_Isend(&curr[len-1][0], nx, MPI_DOUBLE, rnext, 2, MPI_COMM_WORLD, &reqs[3]);
+    }
+    else {
+      MPI_Isend(&curr[len][0], nx, MPI_DOUBLE, rnext, 2, MPI_COMM_WORLD, &reqs[3]);
+    }
+    if (rank == 0) {
+      MPI_Isend(&curr[2][0], nx, MPI_DOUBLE, rprev, 1, MPI_COMM_WORLD, &reqs[2]);
+    }
+    else {
+      MPI_Isend(&curr[1][0], nx, MPI_DOUBLE, rprev, 1, MPI_COMM_WORLD, &reqs[2]);
+    }
 
-    for (int i = 1; i < len - 1; i++) {
+    MPI_Waitall(4, reqs, stats);
+    
+    for (int i = 1; i < len + 1; i++) {
       for (int j = 1; j < nx - 1; j++) {
-	  prev[i][j] = curr[i][j] + 
-	    dt*kappa*(curr[i-1][j] + curr[i+1][j] + 
-		      curr[i][j-1] + curr[i][j+1] - 
-		      4.0*curr[i][j])/(dx*dx);
+	prev[i][j] = curr[i][j] + 
+	  dt*kappa*(curr[i-1][j] + curr[i+1][j] + 
+		    curr[i][j-1] + curr[i][j+1] - 
+		    4.0*curr[i][j])/(dx*dx);
       }
     }
+
     /* Swap the current and previous grids */
     double **tmp = curr;
     curr = prev;
@@ -113,15 +122,20 @@ int main(int argc, char *argv[]) {
     printf("#%lf\n", avg);
   }
 
+  char format[] = "mpi.%d.%d.%d.out";
+  char fname[sizeof format + 100];
+  sprintf(fname,format,nx,rank,numtasks);
+  FILE *fp;
+  fp = fopen(fname, "w");
   for (int j = 0; j < nx; j++) {
     for (int i = 1; i < len + 1; i++) {
-      printf("%f ", curr[i][j]);
+      fprintf(fp, "%f ", curr[i][j]);
     }
-    printf("\n");
+    fprintf(fp, "\n");
   }
 
   /* Free arrays */
-  for (int i = 0; i < nx; i++) {
+  for (int i = 0; i < len + 2; i++) {
     free(curr[i]);
     free(prev[i]);
   }
@@ -129,4 +143,10 @@ int main(int argc, char *argv[]) {
   free(curr);
 
   MPI_Finalize();
+
+  end = clock();
+  exec_time = (double)(end - begin) / CLOCKS_PER_SEC;
+  if (rank == 0) {
+    printf("#%lf\n", exec_time);
+  }
 }

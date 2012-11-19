@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+# parallel/serial job using 1 node and 2 processor cores per node,
+# and runs for 1 hour (max).
+#PBS -l nodes=1:ppn=2,walltime=15:00:00
+#
+# send email on abortion, beginning and ending
+#PBS -m abe
+#
+# error and log files
+#PBS -e log.err
+#PBS -o log.log
+#
+#PBS -V
+# Load openmpi environment
+module load openmpi
+cd /home/bhensley/hw4/
+for nx in 128 256 512 1024
+do
+# Don’t use InfiniBand (IB) on adroit - there’s no IB & get warnings without the option below.
+mpiexec --mca btl ^openib ./heat_mpi $nx > heat_mpi.$nx.2.out
+done
