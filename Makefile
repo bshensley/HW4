@@ -11,7 +11,7 @@ all : heat_serial heat_omp heat_mpi
 
 $(OBJS_SERIAL): CFLAGS := -Wall -g -O3 -std=c99
 $(OBJS_OMP): CFLAGS := -fopenmp -g -Wall -O3 -std=c99
-$(OBJS_MPI): CFLAGS := -Wall -g -std=c99
+$(OBJS_MPI): CFLAGS := -Wall -g -O3 -std=c99
 
 heat_serial : $(OBJS_SERIAL)
 	$(CC) -o $@ $^
