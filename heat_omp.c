@@ -41,9 +41,10 @@ int main(int argc, char *argv[]) {
     prev[i] = (double*)malloc(nx * sizeof(double));
     assert(curr[i] != NULL && prev[i] != NULL);
   }
-    #pragma omp parallel shared(prev, curr)
-  {
-        #pragma omp for schedule(dynamic,chunk) nowait
+ 
+#pragma omp parallel for shared(prev,curr) \
+  schedule(dynamic,chunk)	   \
+  num_threads(nthreads)
     for (int i = 0; i < nx; i++) {
       curr[i][0] = pow(cos(dx*i),2);
       prev[i][0] = pow(cos(dx*i),2);
@@ -54,13 +55,12 @@ int main(int argc, char *argv[]) {
 	prev[i][j] = 0.0;
       }
     }
-  }
 
   /* Implement finite difference method */
   for (double t = 0; t < tmax; t += dt) {
-        #pragma omp parallel shared(prev, curr)
-    {
-      #pragma omp for schedule(dynamic,chunk) nowait
+#pragma omp parallel for shared(prev,curr) \
+  schedule(dynamic,chunk)	   \
+  num_threads(nthreads)
       for (int i = 0; i < nx; i++) {
 	for (int j = 1; j < nx - 1; j++) {
 	  if (i == 0) {
@@ -85,19 +85,17 @@ int main(int argc, char *argv[]) {
       curr = prev;
       prev = tmp;
     }
-  }
 
   /* Compute the average temperature */
   double avg = 0.0;
-#pragma omp parallel shared(prev, curr, avg)
-  {
-#pragma omp for schedule(dynamic,chunk) reduction(+:avg) nowait
+#pragma omp parallel for shared(prev,curr) \
+  schedule(dynamic,chunk)	   \
+  num_threads(nthreads)
     for (int i = 0; i < nx; i++) {
       for (int j = 0; j < nx; j++) {
 	avg += curr[i][j];
       }
     }
-  }
   avg = avg/(nx*nx);
 
   /* Final data dump */

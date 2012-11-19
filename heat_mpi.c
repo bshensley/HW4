@@ -4,22 +4,23 @@
 #include <assert.h>
 #include "mpi.h"
 
-/* Prints grid to screen, with (0,0) in upper left */
-int printgrid(double **grid, const int nx) {
-    for (int j = 0; j < nx; j++) {
-      for (int i = 0; i < nx; i++) {
-	printf("%f ", grid[i][j]);
-      }
-      printf("\n");
-    }
-    return 0;
-}
-
-
 int main(int argc, char *argv[]) {
+  int numtasks, rank;
+  MPI_Request reqs[4];
+  //  MPI_Status stats[4];
+  int rc = MPI_Init(&argc,&argv);
+  if (rc != MPI_SUCCESS) {
+    printf ("Error starting MPI program. Terminating.\n");
+    MPI_Abort(MPI_COMM_WORLD, rc);
+  }
+
+  MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
   const int nx = atoi(argv[1]);
-  const int nthreads = atoi(argv[2]);
-  const int chunk = nx / nthreads;
+  const int len = nx / numtasks;
+  //  int start = rank * (nx / numtasks);
+  //  int end = (rank + 1) * (nx / numtasks) - 1;
 
   /* Equation parameters, constants */
   const double kappa = 1.0;
@@ -28,52 +29,66 @@ int main(int argc, char *argv[]) {
   const double dx = pi / (nx-1);
   const double dt = 0.5*dx*dx/(4.0*kappa);
 
-  /* Initialize grid to nx by nx grid */ 
-  double **curr = (double**)malloc(nx * sizeof(double));
-  double **prev = (double**)malloc(nx * sizeof(double));
+  /* Initialize grid for each process, including ghost cells
+     Domain is chopped into nx/numtasks strips, with two
+     columns of ghost cells on either side */
+  double **curr = (double**)malloc((len+2) * sizeof(double));
+  double **prev = (double**)malloc((len+2) * sizeof(double));
   assert(curr != NULL && prev != NULL);
-
-  int rc = MPI_Init(&argc,&argv);
-  if (rc != MPI_SUCCESS) {
-    printf ("Error starting MPI program. Terminating.\n");
-    MPI_Abort(MPI_COMM_WORLD, rc);
-  }
-
-  for (int i = 0; i < nx; i++) {
+  for (int i = 0; i < len + 2; i++) {
     curr[i] = (double*)malloc(nx * sizeof(double));
     prev[i] = (double*)malloc(nx * sizeof(double));
     assert(curr[i] != NULL && prev[i] != NULL);
   }
-  for (int i = 0; i < nx; i++) {
-    curr[i][0] = pow(cos(dx*i),2);
-    prev[i][0] = pow(cos(dx*i),2);
-    curr[i][nx-1] = pow(sin(dx*i),2);
-    prev[i][nx-1] = pow(sin(dx*i),2);
+
+  for (int i = 0; i < len + 2; i++) {
+    double xcoord = dx*(rank * len + i - 1);
+    curr[i][0] = pow(cos(xcoord),2);
+    prev[i][0] = pow(cos(xcoord),2);
+    curr[i][nx-1] = pow(sin(xcoord*i),2);
+    prev[i][nx-1] = pow(sin(xcoord*i),2);
     for (int j = 1; j < nx - 1; j++) {
       curr[i][j] = 0.0;
       prev[i][j] = 0.0;
     }
   }
 
+  printf("Intialization success on proc %d!\n", rank);
+
+  for (int j = 0; j < nx; j++) {
+    for (int i = 1; i < len + 1; i++) {
+      printf("%f ", curr[i][j]);
+    }
+    printf("\n");
+  }
+
   /* Implement finite difference method */
   for (double t = 0; t < tmax; t += dt) {
-    for (int i = 0; i < nx; i++) {
+
+    int rprev, rnext;
+    rprev = rank - 1;
+    if (rank == 0) {
+      rprev = numtasks - 1;
+    }
+    rnext = rank + 1;
+    if (rank == numtasks - 1) {
+      rnext = 0;
+    }
+
+    /* Receive data from adjacent blocks and place into ghost cells */
+    MPI_Irecv(&curr[len+1], nx, MPI_DOUBLE, rprev, 1, MPI_COMM_WORLD, &reqs[0]);
+    MPI_Irecv(&curr[0], nx, MPI_DOUBLE, rnext, 1, MPI_COMM_WORLD, &reqs[1]);
+
+    /* Pass data to ghost cells of adjacent blocks */
+    MPI_Isend(&curr[0], 1, MPI_DOUBLE, rprev, 1, MPI_COMM_WORLD, &reqs[2]);
+    MPI_Isend(&curr[len+1], 1, MPI_DOUBLE, rnext, 1, MPI_COMM_WORLD, &reqs[3]);
+
+    for (int i = 1; i < len - 1; i++) {
       for (int j = 1; j < nx - 1; j++) {
-	if (i == 0) {
-	  prev[i][j] = curr[i][j] + 
-	    dt*kappa*(curr[nx-2][j] + curr[i+1][j] + 
-		      curr[i][j-1] + curr[i][j+1] - 
-		      4.0*curr[i][j])/(dx*dx);
-	}
-	else if (i == nx - 1) {
-	  prev[i][j] = prev[0][j];
-	}
-	else {
 	  prev[i][j] = curr[i][j] + 
 	    dt*kappa*(curr[i-1][j] + curr[i+1][j] + 
 		      curr[i][j-1] + curr[i][j+1] - 
 		      4.0*curr[i][j])/(dx*dx);
-	}
       }
     }
     /* Swap the current and previous grids */
@@ -83,17 +98,27 @@ int main(int argc, char *argv[]) {
   }
 
   /* Compute the average temperature */
-  double avg = 0.0;
-  for (int i = 0; i < nx; i++) {
+  double sum = 0.0;
+  for (int i = 1; i < len + 1; i++) {
     for (int j = 0; j < nx; j++) {
-      avg += curr[i][j];
+      sum += curr[i][j];
     }
   }
-  avg = avg/(nx*nx);
-  printf("#%lf\n", avg);
+  double sum_tot;
+  MPI_Allreduce(&sum, &sum_tot, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
   /* Final data dump */
-  printgrid(curr, nx);
+  if (rank == 0) {
+    double avg = sum_tot/(nx*nx);
+    printf("#%lf\n", avg);
+  }
+
+  for (int j = 0; j < nx; j++) {
+    for (int i = 1; i < len + 1; i++) {
+      printf("%f ", curr[i][j]);
+    }
+    printf("\n");
+  }
 
   /* Free arrays */
   for (int i = 0; i < nx; i++) {
@@ -102,4 +127,6 @@ int main(int argc, char *argv[]) {
   }
   free(prev);
   free(curr);
+
+  MPI_Finalize();
 }
